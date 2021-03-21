@@ -1,14 +1,14 @@
 (ns konserve-cassandra.io
   (:require [qbits.alia :as qa]
-            [qbits.alia.async :as qasync]
-            [qbits.hayt :as qh]
-            [clojure.core.async :as async]
-            [konserve-cassandra.core :as core])
+            [qbits.hayt :as qh])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream]))
 
-(defn split-header [bytes-or-blob]
-  (when (some? bytes-or-blob)
-    (let [data  (->> bytes-or-blob vec (split-at 4))
+(defn split-header [byte-buffer]
+  (when (some? byte-buffer)
+    (let [data  (->> byte-buffer
+                     .array
+                     vec
+                     (split-at 4))
           streamer (fn [header data] (list (byte-array header) (-> data byte-array (ByteArrayInputStream.))))]
       (apply streamer data))))
 
@@ -21,50 +21,58 @@
 (defn exists?
   "Check if the Cassandra connection has any tables in its keyspace
 
-   Arguments: session, table, id"
+   Arguments: conn, id"
   [{:keys [session table]} id]
-  (qasync/execute-chan session
-                       (qh/select table
-                                  (qh/where {:id id}))))
+  (-> (qa/execute session
+                  (qh/select table
+                             (qh/where {:id id}))
+                  {:result-set-fn #(first %)})
+      empty?
+      not))
 
-(defn get-all [{:keys [session table]} id]
-  (qasync/execute-chan session
-                       (qh/select table
-                         (qh/where {:id id}))
-                       {:result-set-fn #(first %)}))
+(defn get-both [{:keys [session table]} id]
+  (let [{:keys [data meta id]} (qa/execute session
+                                           (qh/select table
+                                             (qh/where {:id id}))
+                                           {:result-set-fn #(first %)})]
+    (if (and meta data)
+      [(split-header meta) (split-header data)]
+      [nil nil])))
 
 (defn get-data [{:keys [session table]} id]
-  (qasync/execute-chan session
-                       (qh/select table
-                                  (qh/columns :id :data)
-                                  (qh/where {:id id}))
-                       {:result-set-fn #(first %)}))
+  (let [{:keys [data]} (qa/execute session
+                                   (qh/select table
+                                              (qh/columns :data)
+                                              (qh/where {:id id}))
+                                   {:result-set-fn #(first %)})]
+    (when data (split-header data))))
 
 (defn get-meta [{:keys [session table]} id]
-  (qasync/execute-chan session
-                       (qh/select table
-                                  (qh/columns :id :meta)
-                                  (qh/where {:id id}))
-                       {:result-set-fn #(first %)}))
+  (let [{:keys [meta]} (qa/execute session
+                                   (qh/select table
+                                              (qh/columns :meta)
+                                              (qh/where {:id id}))
+                                   {:result-set-fn #(first %)})]
+    (when meta (split-header meta))))
 
-(defn update [{:keys [session table]} id data]
+(defn update-both [{:keys [session table]} id data]
   (qa/execute session
               (qh/update table
                          (qh/set-columns {:meta (first data)
                                           :data (second data)})
                          (qh/where {:id id}))))
 
-(defn insert [{:keys [session table]} id data]
+(defn insert-both [{:keys [session table]} id data]
   (qa/execute session
               (qh/insert table
                          (qh/values {:id id
                                      :meta (first data)
                                      :data (second data)}))))
 
-(defn delete [{:keys [session table]} id]
-  (qasync/execute-chan session
-                       (qh/delete table
-                                  (qh/where {:id id}))))
+(defn delete-entry [{:keys [session table]} id]
+  (qa/execute session
+              (qh/delete table
+                         (qh/where {:id id}))))
 
 (defn create-table [{:keys [session table]}]
   (qa/execute session
@@ -76,23 +84,20 @@
                                                        :primary-key [:id]}))))
 
 (defn drop-table [{:keys [session table]}]
-  (qasync/execute-chan session
-                       (qh/drop-table table)))
+  (qa/execute session
+              (qh/drop-table table)))
 
 (comment
-  (def cluster (qa/cluster {:session-keyspace "alia"
-                            :contact-points ["127.0.0.1"]}))
-
-  (def conn {:session (qa/connect cluster "alia")
-             :table :foo})
+  (require '[konserve-cassandra.core :as core])
+  (def config {:cluster {:session-keyspace "alia"
+                         :contact-points ["127.0.0.1"]}})
+  (def store (<!! (core/new-cassandra-store config)))
 
   (.getLoggedKeyspace (:session conn))
 
   (create-table conn)
-  (async/<!! (exists? conn "1"))
+  (<!! (exists? conn "1"))
   (drop-table conn)
-
-  (async/<!! (qasync/execute-chan (:session conn) "SELECT * FROM foo WHERE id = '1'"))
 
   (require '[konserve-cassandra.core :as core])
   (def ^ByteArrayOutputStream test-meta (ByteArrayOutputStream.))
@@ -100,12 +105,13 @@
   (def ^ByteArrayOutputStream test-data (ByteArrayOutputStream.))
   (.write test-data 3)
   (update conn (core/str-uuid [:foo :bar]) [(.toByteArray test-meta) (.toByteArray test-data)])
-  (qa/execute (:session conn)
-              (qh/select :foo))
+  (def foo (qa/execute (:session conn)
+                       (qh/select :foo)))
 
-  (:data (async/<!! (get-all conn "02d2b7ff-609b-50c4-9437-9c7eb6e4e98f")))
-  (async/<!! (get-data conn "02d2b7ff-609b-50c4-9437-9c7eb6e4e98f"))
-  (qa/execute (:session conn)
-              (qh/select (:table conn)
-                (qh/where {:id "02d2b7ff-609b-50c4-9437-9c7eb6e4e98f"}))
-              {:result-set-fn #(first %)}))
+  (get-data (:conn store) "06cee0d3-72f7-5bfd-ae3b-af7c2f0fef8f")
+  (def data (:data (qa/execute (:session (:conn store))
+                               (qh/select (:table (:conn store))
+                                          (qh/columns :id :data)
+                                          (qh/where {:id "06cee0d3-72f7-5bfd-ae3b-af7c2f0fef8f"}))
+                               {:result-set-fn #(first %)})))
+  (split-header data))
