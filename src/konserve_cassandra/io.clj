@@ -89,11 +89,17 @@
 
 (comment
   (require '[konserve-cassandra.core :as core])
+  (require '[clojure.core.async :refer [<!!]])
   (def config {:cluster {:session-keyspace "alia"
                          :contact-points ["127.0.0.1"]}})
+
+  (def cluster (cluster (:cluster config)))
+  (def conn (qa/connect cluster))
+  (qa/execute conn (qh/create-keyspace :alia (qh/with {:replication {:class "SimpleStrategy" :replication_factor 1}})))
+
   (def store (<!! (core/new-cassandra-store config)))
 
-  (.getLoggedKeyspace (:session conn))
+  (.getLoggedKeyspace (:session (:conn store)))
 
   (create-table conn)
   (<!! (exists? conn "1"))
