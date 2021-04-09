@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o pipefail
+
+trap teardown EXIT
+
+function setup() {
+    if [ -z ${CIRCLECI} ]; then
+        echo $(docker run --detach --publish 9042:9042 --env CASSANDRA_LISTEN_ADDRESS=127.0.0.1 cassandra:latest)
+    fi
+}
+
+function teardown() {
+    if [ -z ${CIRCLECI} ]; then
+        docker rm -f ${CONTAINER_NAME}
+    fi
+}
+
+CONTAINER_NAME=$(setup)
+
+bin/kaocha
