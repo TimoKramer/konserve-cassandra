@@ -4,8 +4,15 @@
         io.replikativ/incognito {:mvn/version "0.2.8-SNAPSHOT"}
         com.taoensso/timbre {:mvn/version "5.1.2"}
         cc.qbits/alia {:mvn/version "4.3.3"}
-        cc.qbits/alia-async {:mvn/version "4.3.3"}
         cc.qbits/hayt {:mvn/version "4.1.0"}}
  :aliases {:test {:extra-paths ["test"]
                   :extra-deps {lambdaisland/kaocha {:mvn/version "1.0.829"}
-                               metosin/malli {:mvn/version "0.4.0"}}}}}
+                               metosin/malli {:mvn/version "0.4.0"}}}
+           :jar {:replace-deps {com.github.seancorfield/depstar {:mvn/version "2.0.216"}}
+                 :exec-fn hf.depstar/jar
+                 :exec-args {:jar "konserve-cassandra.jar" :sync-pom true}}
+           :deploy {:replace-deps {slipset/deps-deploy {:mvn/version "0.1.5"}}
+                    :exec-fn deps-deploy.deps-deploy/deploy
+                    :exec-args {:installer :remote :artifact "konserve-cassandra.jar"}}
+           :format {:extra-deps {cljfmt/cljfmt {:mvn/version "0.7.0"}}
+                    :main-opts ["-m" "cljfmt.main" "check"]}}}
