@@ -38,7 +38,7 @@
 (defn raw-get-both [{:keys [session table]} id]
   (let [{:keys [data meta]} (qa/execute session
                                         (qh/select table
-                                          (qh/where {:id id}))
+                                                   (qh/where {:id id}))
                                         {:result-set-fn #(first %)})]
     (when (and meta data)
       {:data (.array data)
@@ -138,7 +138,7 @@
                               "konserve")
          keyspace-config (or (-> config :store :keyspace)
                              {:replication {:class "SimpleStrategy" :replication_factor 1}})]
-      (qa/execute session
+     (qa/execute session
                  (qh/create-keyspace session-keyspace
                                      (qh/with keyspace-config))))))
 

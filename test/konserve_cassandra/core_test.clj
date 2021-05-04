@@ -95,14 +95,14 @@
       (<!! (k/bget store :binbar (fn [ans] (is (nil? (:input-stream ans))))))
       (<!! (k/bassoc store :binbar (byte-array (range 10))))
       (<!! (k/bget store :binbar (fn [res]
-                                    (reset! cb true)
-                                    (is (= (map byte (slurp (:input-stream res)))
-                                           (range 10))))))
+                                   (reset! cb true)
+                                   (is (= (map byte (slurp (:input-stream res)))
+                                          (range 10))))))
       (<!! (k/bassoc store :binbar (byte-array (map inc (range 10)))))
       (<!! (k/bget store :binbar (fn [res]
-                                    (reset! cb2 true)
-                                    (is (= (map byte (slurp (:input-stream res)))
-                                           (map inc (range 10)))))))
+                                   (reset! cb2 true)
+                                   (is (= (map byte (slurp (:input-stream res)))
+                                          (map inc (range 10)))))))
       (is (<!! (k/exists? store :binbar)))
       (is @cb)
       (is @cb2)
@@ -125,7 +125,7 @@
       (<!! (k/append store :foo {:bar 42}))
       (<!! (k/append store :foo {:bar 43}))
       (is (= (<!! (k/log store :foo))
-             '({:bar 42}{:bar 43})))
+             '({:bar 42} {:bar 43})))
       (is (= (<!! (k/reduce-log store
                                 :foo
                                 (fn [acc elem]
@@ -136,15 +136,15 @@
 
 (def home
   [:map
-    [:name string?]
-    [:description string?]
-    [:rooms pos-int?]
-    [:capacity float?]
-    [:address
-      [:map
-        [:street string?]
-        [:number int?]
-        [:country [:enum "kenya" "lesotho" "south-africa" "italy" "mozambique" "spain" "india" "brazil" "usa" "germany"]]]]])
+   [:name string?]
+   [:description string?]
+   [:rooms pos-int?]
+   [:capacity float?]
+   [:address
+    [:map
+     [:street string?]
+     [:number int?]
+     [:country [:enum "kenya" "lesotho" "south-africa" "italy" "mozambique" "spain" "india" "brazil" "usa" "germany"]]]]])
 
 (deftest realistic-test
   (testing "Realistic data test."
@@ -189,8 +189,8 @@
       (print "Writing 2MB binary: ")
       (time (<!! (k/bassoc store :binary (byte-array sevens))))
       (<!! (k/bget store :binary (fn [{:keys [input-stream]}]
-                                    (is (= (pmap byte (slurp input-stream))
-                                           sevens)))))
+                                   (is (= (pmap byte (slurp input-stream))
+                                          sevens)))))
       (delete-store store))))
 
 (deftest raw-meta-test
@@ -235,9 +235,9 @@
           store (<!! (new-store config :table "test_exceptions"))
           params (clojure.core/keys store)
           corruptor (fn [s k]
-                        (if (= (type (k s)) clojure.lang.Atom)
-                          (clojure.core/assoc-in s [k] (atom {}))
-                          (clojure.core/assoc-in s [k] (UnknownType.))))
+                      (if (= (type (k s)) clojure.lang.Atom)
+                        (clojure.core/assoc-in s [k] (atom {}))
+                        (clojure.core/assoc-in s [k] (UnknownType.))))
           corrupt (reduce corruptor store params)] ; let's corrupt our store
       (is (exception? (<!! (new-store {} :table "test_exceptions2"))))
       (is (exception? (<!! (k/get corrupt :bad))))
