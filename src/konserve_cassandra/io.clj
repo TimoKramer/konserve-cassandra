@@ -1,7 +1,10 @@
 (ns konserve-cassandra.io
   (:require [qbits.alia :as qa]
-            [qbits.hayt :as qh])
-  (:import  [java.io ByteArrayInputStream ByteArrayOutputStream]))
+            [qbits.hayt :as qh]
+            [taoensso.timbre :as log])
+  (:import  [java.io ByteArrayInputStream ByteArrayOutputStream]
+            [java.lang RuntimeException]
+            [com.datastax.driver.core.exceptions AlreadyExistsException]))
 
 (defn split-header [byte-obj]
   (when (some? byte-obj)
@@ -131,11 +134,11 @@
   ([session]
    (create-keyspace session nil))
   ([session config]
-   (let [session-keyspace (or (-> config :cluster :session-keyspace)
+   (let [session-keyspace (or (-> config :store :session-keyspace)
                               "konserve")
-         keyspace-config (or (-> config :keyspace)
+         keyspace-config (or (-> config :store :keyspace)
                              {:replication {:class "SimpleStrategy" :replication_factor 1}})]
-     (qa/execute session
+      (qa/execute session
                  (qh/create-keyspace session-keyspace
                                      (qh/with keyspace-config))))))
 
@@ -150,6 +153,7 @@
                  (qh/drop-keyspace session-keyspace)))))
 
 (defn create-table [{:keys [session table]}]
+  (log/info "Creating table " table)
   (qa/execute session
               (qh/create-table table
                                (qh/if-not-exists)
@@ -165,7 +169,7 @@
 (comment
   (require '[konserve-cassandra.core :as core])
   (require '[clojure.core.async :refer [<!!]])
-  (def config {:cluster {:session-keyspace "alia"
+  (def config {:cluster {:session-keyspace ""
                          :contact-points ["127.0.0.1"]}})
 
   (def mycluster (cluster (:cluster config)))

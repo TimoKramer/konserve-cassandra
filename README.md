@@ -1,8 +1,17 @@
 # Cassandra konserve backend
+This is a [konserve](https://github.com/replikativ/konserve) backend for [Apache Cassandra](https://cassandra.apache.org/)
 
-# Status
+<p align="center">
+<a href="https://clojurians.slack.com/archives/CB7GJAN0L"><img src="https://img.shields.io/badge/clojurians%20slack-join%20channel-blueviolet"/></a>
+<a href="https://clojars.org/timokramer/konserve-cassandra"> <img src="https://img.shields.io/clojars/v/timokramer/konserve-cassandra.svg" /></a>
+<a href="https://circleci.com/gh/timokramer/konserve-cassandra"><img src="https://circleci.com/gh/timokramer/konserve-cassandra.svg?style=shield"/></a>
+<a href="https://github.com/timokramer/konserve-cassandra/tree/development"><img src="https://img.shields.io/github/last-commit/timokramer/konserve-cassandra/development"/></a>
+<!--<a href="https://versions.deps.co/timokramer/konserve-cassandra" title="Dependencies Status"><img src="https://versions.deps.co/timokramer/konserve-cassandra/status.svg" /></a>-->
+</p>
 
-In development
+## Configuration
+[I am using alia for cassandra](https://mpenet.github.io/alia/qbits.alia.html#var-cluster),
+please take a look at this library for the configuration parameters.
 
 ## License
 

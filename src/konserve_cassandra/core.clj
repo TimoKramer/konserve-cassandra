@@ -23,10 +23,14 @@
   [key]
   (str (hasch/uuid key)))
 
-(defn prep-ex
-  [^String message ^Exception e]
-  ; (.printStackTrace e)
-  (ex-info message {:error (.getMessage e) :cause (.getCause e) :trace (.getStackTrace e)}))
+;; TODO macro!!!
+(defmacro prep-ex
+  "foo"
+  [message e]
+  `(ex-info ~message {:error (.getMessage ~e) :cause (.getCause ~e) :trace (.getStackTrace ~e)}))
+
+(comment
+  (macroexpand-1 '(prep-ex "foo" (Exception. "bar"))))
 
 (defn prep-stream
   [stream]
@@ -82,7 +86,7 @@
     [_ key-vec meta-up-fn up-fn args]
     (let [res-ch (chan 1)]
       (thread
-        (try
+        ;(try
           (let [[fkey & rkey] key-vec
                 [[mheader ometa'] [vheader oval']] (io/get-both conn (str-uuid fkey))
                 old-val [(when ometa'
@@ -117,7 +121,7 @@
               (-serialize writer vbaos write-handlers nval))
             (io/update-both conn (str-uuid fkey) [(.toByteArray mbaos) (.toByteArray vbaos)])
             (put! res-ch [(second old-val) nval]))
-          (catch Exception e (put! res-ch (prep-ex "Failed to update/write value in store" e)))))
+          #_(catch Exception e (put! res-ch (prep-ex "Failed to update/write value in store" e))))
       res-ch))
 
   (-assoc-in [this key-vec meta val] (-update-in this key-vec meta (fn [_] val) []))
@@ -262,10 +266,8 @@
   (let [res-ch (chan 1)]
     (thread
       (try
-        (let [cluster (io/cluster (:cluster config))
-              session (io/connect cluster (-> config
-                                              :cluster
-                                              :session-keyspace))
+        (let [cluster (io/cluster config)
+              session (io/connect cluster (:session-keyspace config))
               _ (io/create-table {:session session :table table})]
             (put! res-ch
               (map->CassandraStore {:conn {:session session :table table}
@@ -280,7 +282,8 @@
           (put! res-ch (prep-ex "Failed to connect to store" e)))))
     res-ch))
 
-(defn delete-store [{:keys [conn]}]
+(defn delete-store [{:keys [conn] :as foo}]
+  (println foo)
   (let [res-ch (chan 1)]
     (thread
       (try
@@ -291,9 +294,9 @@
 
 (comment
   (require '[konserve.core :as k])
-  (def config {:cluster {:session-keyspace "alia"
-                         :contact-points ["127.0.0.1"]}})
-  (def store (<!! (new-store config :table "foo")))
+  (def config {:session-keyspace "alia"
+               :contact-points ["127.0.0.1"]})
+  (def store (<!! (new-store config)))
   (def conn (:conn store))
   (<!! (delete-store store))
   (io/create-table (-> store

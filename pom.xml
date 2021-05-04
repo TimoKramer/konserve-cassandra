@@ -13,6 +13,11 @@
       <version>1.10.3</version>
     </dependency>
     <dependency>
+      <groupId>io.replikativ</groupId>
+      <artifactId>incognito</artifactId>
+      <version>0.2.8-SNAPSHOT</version>
+    </dependency>
+    <dependency>
       <groupId>cc.qbits</groupId>
       <artifactId>alia-async</artifactId>
       <version>4.3.3</version>
@@ -21,6 +26,16 @@
       <groupId>cc.qbits</groupId>
       <artifactId>hayt</artifactId>
       <version>4.1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.taoensso</groupId>
+      <artifactId>timbre</artifactId>
+      <version>5.1.2</version>
+    </dependency>
+    <dependency>
+      <groupId>io.replikativ</groupId>
+      <artifactId>konserve</artifactId>
+      <version>0.6.0-alpha2</version>
     </dependency>
     <dependency>
       <groupId>cc.qbits</groupId>

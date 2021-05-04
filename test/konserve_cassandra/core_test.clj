@@ -35,9 +35,9 @@
 
 (use-fixtures :once setup)
 
-#_(def store (<!! (new-store config)))
+(def store (<!! (new-store config)))
 
-#_(compliance-test store)
+(compliance-test store)
 
 (deftest get-nil-test
   (testing "Test getting on empty store"
