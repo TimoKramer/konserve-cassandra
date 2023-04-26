@@ -6,7 +6,7 @@ In development
 
 ## License
 
-Copyright © 2020 Timo Kramer
+Copyright © 2023 Timo Kramer
 
 This program and the accompanying materials are made available under the
 terms of the Eclipse Public License 2.0 which is available at

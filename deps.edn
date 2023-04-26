@@ -1,7 +1,10 @@
-{:deps {org.clojure/clojure {:mvn/version "1.10.3"}
-        org.clojure/core.async {:mvn/version "1.3.610"}
-        io.replikativ/konserve {:local/root "../konserve"}
-        io.replikativ/incognito {:local/root "../incognito"}
-        cc.qbits/alia {:mvn/version "4.3.3"}
-        cc.qbits/alia-async {:mvn/version "4.3.3"}
-        cc.qbits/hayt {:mvn/version "4.1.0"}}}
+{:deps {org.clojure/clojure {:mvn/version "1.12.0-alpha3"}
+        org.clojure/core.async {:mvn/version "1.6.673"}
+        io.replikativ/konserve {:mvn/version "0.7.311"}
+        cc.qbits/alia {:mvn/version "5.0.0"}
+        cc.qbits/alia-async {:mvn/version "5.0.0"}
+        cc.qbits/hayt {:mvn/version "4.1.0"}
+        com.taoensso/timbre {:mvn/version "6.1.0"}}
+ :aliases {:test {:main-opts ["-m" "kaocha.runner"]
+                  :extra-paths ["test"]
+                  :extra-deps {lambdaisland/kaocha {:mvn/version "1.82.1306"}}}}}
