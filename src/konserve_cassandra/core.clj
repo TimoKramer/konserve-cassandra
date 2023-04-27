@@ -111,12 +111,13 @@
     (connect-default-store backing config)))
 
 (defn delete-store [cassandra-config & {:keys [table opts] :or {table default-table}}]
-  (let [sync-opts (merge {:sync? true} opts)
+  (let [complete-opts (merge {:sync? true} opts)
         conn (io/connect cassandra-config)
         backing (CassandraStore. conn table)]
-    (-delete-store backing sync-opts)))
+    (-delete-store backing complete-opts)))
 
 (defn release
   "Must be called after work on database has finished in order to close connection"
-  [session]
-  (io/close session))
+  [{{session :session} :backing} env]
+  (async+sync (:sync? env) *default-sync-translation*
+              (go-try- (io/close session))))

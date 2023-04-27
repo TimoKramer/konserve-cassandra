@@ -2,17 +2,11 @@
   (:require [qbits.alia :as qa]
             [qbits.hayt :as qh]
             [taoensso.timbre :as log])
-  (:import [java.io ByteArrayInputStream]
-           [java.nio HeapByteBuffer]
-           [com.datastax.oss.driver.internal.core.session DefaultSession]
+  (:import [java.nio HeapByteBuffer]
+           [java.io ByteArrayInputStream]
+           [java.util Arrays]
            [com.datastax.oss.driver.api.core InvalidKeyspaceException]
            [clojure.lang ExceptionInfo]))
-
-(defn split-header [bytes-or-blob dbtype]
-  (when (some? bytes-or-blob)
-    (let [data  (->> bytes vec (split-at 4))
-          streamer (fn [header data] (list (byte-array header) (-> data byte-array (ByteArrayInputStream.))))]
-      (apply streamer data))))
 
 (defn connect
   ;; Config argument needs to be a map of at least
@@ -23,50 +17,51 @@
    (qa/session config)
    (catch InvalidKeyspaceException e
      (log/error (ex-message e) {:config config})
+     e)
+   (catch ExceptionInfo e
+     (log/error "WHUUUUUUUUUUT!" #_(ex-message e ) {:config config})
      e)))
-
-(defn table-exists?
-  "Check if the Cassandra connection has any tables in its keyspace
-   Argument: connection map with :session set to session"
-  [session table]
-  (->> (qh/select table
-        (qh/columns :system_schema.tables)
-        (qh/where {:keyspace_name (-> ^DefaultSession session .getKeyspace .get .toString)}))
-       (qa/execute session)
-       empty?
-       not))
 
 (defn row-exists? [session table id]
   (try
-    (->> (qh/select :id
-           (qh/columns table)
+    (->> (qh/select table
+           (qh/columns :id)
            (qh/where {:id id})
            (qh/limit 1))
-         (qa/execute session))
+         (qa/execute session)
+         seq?)
     (catch ExceptionInfo _e
       false)))
 
 (defn parse-result [res]
-  (map (fn [{:keys [id header meta value]}]
-         {:id id
-          :header (when bytes? (-> ^HeapByteBuffer header .array slurp))
-          :meta (when bytes? (-> ^HeapByteBuffer meta .array slurp))
-          :value (when bytes? (-> ^HeapByteBuffer value .array slurp))})
+  (map (fn [{:keys [id header meta val]}]
+         (cond-> {:id id}
+           header (assoc :header (-> ^HeapByteBuffer header .array slurp))
+           meta (assoc :meta (-> ^HeapByteBuffer meta .array slurp))
+           val (assoc :val (-> ^HeapByteBuffer val .array slurp))))
        res))
 
 (defn select [session table id column & {:keys [binary? locked-cb] :or {binary? false}}]
-  (let [res (->> (qh/select :id column
-                   (qh/columns table)
+  (let [res (->> (qh/select table
+                   (qh/columns :id column)
                    (qh/where {:id id}))
-                 (#(qa/execute session % {:result-set-fn parse-result})))]
-    res))
+                 (qa/execute session)
+                 first
+                 column
+                 .array)]
+    (if binary?
+      (locked-cb {:input-stream (when res (ByteArrayInputStream. res))
+                  :size nil})
+      res)))
 
-(defn insert [session table id header meta value]
+(type (byte-array 2))
+
+(defn insert [session table id header meta val]
   (->> (qh/insert table
                   (qh/values {:id id
                               :header header
                               :meta meta
-                              :value value}))
+                              :val val}))
        (qa/execute session)))
 
 (defn delete [session table id]
@@ -76,36 +71,38 @@
 
 (defn copy [session table from to]
   ;; TODO very bad. not possible to make this consistent with cassandra?
-  (let [{:keys [header meta value] :as res}
+  (let [{:keys [header meta val]}
         (->> (qh/select table
-                        (qh/columns :id :header :meta :value)
+                        (qh/columns :id :header :meta :val)
                         (qh/where {:id from}))
              (qa/execute session))]
     (->> (qh/insert table
                     (qh/values {:id to
                                 :header header
                                 :meta meta
-                                :value value}))
+                                :val val}))
          (qa/execute session))))
 
 (defn move [session table from to]
-  (let [{:keys [header meta value] :as res}
+  (let [{:keys [header meta val] :as res}
         (->> (qh/select table
-                        (qh/columns :id :header :meta :value)
+                        (qh/columns :id :header :meta :val)
                         (qh/where {:id from}))
              (qa/execute session))]
-    (qa/batch [(qh/insert table
-                          (qh/values {:id to
-                                      :header header
-                                      :meta meta
-                                      :value value}))
-               (qh/delete table
-                          (qh/where {:id from}))])))
+    (->> (qa/batch [(qh/insert table
+                               (qh/values {:id to
+                                           :header header
+                                           :meta meta
+                                           :val val}))
+                    (qh/delete table
+                               (qh/where {:id from}))])
+         (qa/execute session))))
 
 (defn keys [session table]
   (->> (qh/select table
                   (qh/columns :id))
-       (#(qa/execute session % {:result-set-fn parse-result}))))
+       (qa/execute session)
+       (map :id)))
 
 (defn create-table [session table]
   (->> (qh/create-table table
@@ -113,13 +110,13 @@
                        (qh/column-definitions {:id :varchar
                                                :header :blob
                                                :meta :blob
-                                               :value :blob
+                                               :val :blob
                                                :primary-key [:id]}))
        (qa/execute session)))
 
 (defn drop-table [session table]
-  (qa/execute-async session
-                    (qh/drop-table table)))
+  (qa/execute session
+              (qh/drop-table table)))
 
 (defn close [session]
   (qa/close session))
@@ -133,10 +130,16 @@
   (def my-session (qa/session {:session-keyspace keyspace
                                :contact-points ["127.0.0.1"]}))
 
+  (drop-table my-session :foo)
   (create-table my-session :foo)
   (insert my-session :foo "myid" (byte-array (map byte "header")) (byte-array (mapv byte "meta")) (byte-array (mapv byte "value")))
   (copy my-session :foo "myid" "myid2")
-  (->> (move my-session :foo "myid" "myid3") (qa/execute my-session))
+  (move my-session :foo "myid" "myid3")
+  (keys my-session :foo)
+  (delete my-session :foo "myid3")
+  (select my-session :foo "myid2" :meta)
+  (row-exists? my-session :foo "myid2")
+  (close my-session)
   (->> (qh/select :foo
                   (qh/columns :id :header :meta :value))
        ((fn [query] (qa/execute my-session query {:result-set-fn
@@ -146,31 +149,4 @@
                                                                    :header (when bytes? (-> header .array slurp))
                                                                    :meta (when bytes? (-> meta .array slurp))
                                                                    :value (when bytes? (-> value .array slurp))})]
-                                                      (map parse res)))}))))
-
-  (qa/execute my-session "CREATE TABLE users (user_name varchar,
-                                              first_name varchar,
-                                              last_name varchar,
-                                              auuid uuid,
-                                              birth_year bigint,
-                                              created timestamp,
-                                              valid boolean,
-                                              emails set<text>,
-                                              tags list<bigint>,
-                                              amap map<varchar, bigint>,
-                                              PRIMARY KEY (user_name));")
-
-  (qa/execute my-session "INSERT INTO users
-                          (user_name, first_name, last_name, emails, birth_year, amap, tags, auuid,valid)
-                          VALUES('frodo', 'Frodo', 'Baggins',
-                          {'f@baggins.com', 'baggins@gmail.com'}, 1,
-                          {'foo': 1, 'bar': 2}, [4, 5, 6],
-                          1f84b56b-5481-4ee4-8236-8a3831ee5892, true);")
-
-  (def prepared-statement (qa/prepare my-session "select * from users where user_name=?;"))
-
-  (qa/execute my-session prepared-statement {:values ["frodo"]})
-
-  (def prepared-statement (qa/prepare my-session "select * from users where user_name= :name limit :lmt;"))
-
-  (qa/execute my-session prepared-statement {:values {:name "frodo" :lmt (int 1)}}))
+                                                      (map parse res)))})))))
