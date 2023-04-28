@@ -18,7 +18,7 @@ workflows:
           context: docker-deploy
           requires:
             - tools/setup
-      - tools/integrationtest:
+      - tools/integrationtest-cassandra:
           context: docker-deploy
           requires:
             - tools/setup
@@ -30,7 +30,7 @@ workflows:
             branches:
               only: main
           requires:
-            - tools/integrationtest
+            - tools/integrationtest-cassandra
             - tools/format
             - tools/build
       - tools/release:
