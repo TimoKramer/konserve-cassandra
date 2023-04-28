@@ -1,13 +1,11 @@
 (ns konserve-cassandra.core
   "Address globally aggregated immutable key-value store(s)."
-  (:require [clojure.core.async :as async]
-            [konserve.compressor :refer [null-compressor]]
+  (:require [konserve.compressor :refer [null-compressor]]
             [konserve.encryptor :refer [null-encryptor]]
             [konserve.impl.defaults :refer [connect-default-store]]
             [konserve.impl.storage-layout :refer [PBackingStore PBackingBlob PBackingLock -delete-store]]
             [konserve.utils :refer [async+sync *default-sync-translation*]]
-            [superv.async :refer [go-try- <?-]]
-            [hasch.core :as hasch]
+            [superv.async :refer [go-try-]]
             [konserve-cassandra.io :as io]))
 
 (set! *warn-on-reflection* 1)
@@ -95,10 +93,10 @@
   [cassandra-config & {:keys [table opts]
                        :or {table default-table}
                        :as params}]
-  (let [sync-opts (merge {:sync? true} opts)
+  (let [complete-opts (merge {:sync? true} opts)
         conn (io/connect cassandra-config)
         backing (CassandraStore. conn table)
-        config (merge {:opts               sync-opts
+        config (merge {:opts               complete-opts
                        :config             {:sync-blob? true
                                             :in-place? true
                                             :lock-blob? true}
@@ -107,7 +105,7 @@
                        :encryptor          null-encryptor
                        :buffer-size        (* 1024 1024)}
                       (dissoc params :opts :config)
-                 cassandra-config)]
+                      cassandra-config)]
     (connect-default-store backing config)))
 
 (defn delete-store [cassandra-config & {:keys [table opts] :or {table default-table}}]
@@ -121,3 +119,47 @@
   [{{session :session} :backing} env]
   (async+sync (:sync? env) *default-sync-translation*
               (go-try- (io/close session))))
+
+(comment
+  (require '[konserve.core :as k]
+           '[clojure.core.async :refer [<!!]])
+
+  (def store-conf {:session-keyspace "alia"})
+
+  (delete-store store-conf :opts {:sync? true})
+  (def store (connect-store store-conf
+                            :opts {:sync? true}))
+  (k/assoc-in store ["foo" :bar] {:foo "baz"} {:sync? true})
+  (k/get-in store ["foo"] nil {:sync? true})
+  (k/exists? store "foo" {:sync? true})
+  (k/assoc-in store [:bar] 42 {:sync? true})
+  (k/update-in store [:bar] inc {:sync? true})
+  (k/get-in store [:bar] nil {:sync? true})
+  (k/dissoc store :bar {:sync? true})
+  (k/append store :error-log {:type :horrible} {:sync? true})
+  (k/log store :error-log {:sync? true})
+  (k/keys store {:sync? true})
+  (k/bassoc store :binbar (byte-array (range 10)) {:sync? true})
+  (k/bget store :binbar (fn [{:keys [input-stream]}]
+                          (map byte (slurp input-stream)))
+          {:sync? true})
+  (release store {:sync? true})
+
+  (<!! (delete-store store-conf :opts {:sync? false}))
+  (def store (<!! (connect-store store-conf
+                                 :opts {:sync? false})))
+  (<!! (k/assoc-in store ["foo" :bar] {:foo "baz"} {:sync? false}))
+  (<!! (k/get-in store ["foo"] nil {:sync? false}))
+  (<!! (k/exists? store "foo" {:sync? false}))
+  (<!! (k/assoc-in store [:bar] 42 {:sync? false}))
+  (<!! (k/update-in store [:bar] inc {:sync? false}))
+  (<!! (k/get-in store [:bar] nil {:sync? false}))
+  (<!! (k/dissoc store :bar {:sync? false}))
+  (<!! (k/append store :error-log {:type :horrible} {:sync? false}))
+  (<!! (k/log store :error-log {:sync? false}))
+  (<!! (k/keys store {:sync? false}))
+  (<!! (k/bassoc store :binbar (byte-array (range 10)) {:sync? false}))
+  (<!! (k/bget store :binbar (fn [{:keys [input-stream]}]
+                               (map byte (slurp input-stream)))
+               {:sync? false}))
+  (<!! (release store {:sync? false})))

@@ -9,25 +9,21 @@
            [clojure.lang ExceptionInfo]))
 
 (defn connect
-  ;; Config argument needs to be a map of at least
-  ;; :session-keyspace and :contact-points
+  ;; Config argument needs to be a map of at least :session-keyspace
   ;; See https://docs.datastax.com/en/developer/java-driver/4.0/manual/core/configuration/
   [config]
   (try
-   (qa/session config)
-   (catch InvalidKeyspaceException e
-     (log/error (ex-message e) {:config config})
-     e)
-   (catch ExceptionInfo e
-     (log/error "WHUUUUUUUUUUT!" #_(ex-message e ) {:config config})
-     e)))
+    (qa/session config)
+    (catch InvalidKeyspaceException e
+      (log/error (ex-message e) {:config config})
+      e)))
 
 (defn row-exists? [session table id]
   (try
     (->> (qh/select table
-           (qh/columns :id)
-           (qh/where {:id id})
-           (qh/limit 1))
+                    (qh/columns :id)
+                    (qh/where {:id id})
+                    (qh/limit 1))
          (qa/execute session)
          seq?)
     (catch ExceptionInfo _e
@@ -43,8 +39,8 @@
 
 (defn select [session table id column & {:keys [binary? locked-cb] :or {binary? false}}]
   (let [res (->> (qh/select table
-                   (qh/columns :id column)
-                   (qh/where {:id id}))
+                            (qh/columns :id column)
+                            (qh/where {:id id}))
                  (qa/execute session)
                  first
                  column
@@ -53,8 +49,6 @@
       (locked-cb {:input-stream (when res (ByteArrayInputStream. res))
                   :size nil})
       res)))
-
-(type (byte-array 2))
 
 (defn insert [session table id header meta val]
   (->> (qh/insert table
@@ -106,12 +100,12 @@
 
 (defn create-table [session table]
   (->> (qh/create-table table
-                       (qh/if-not-exists)
-                       (qh/column-definitions {:id :varchar
-                                               :header :blob
-                                               :meta :blob
-                                               :val :blob
-                                               :primary-key [:id]}))
+                        (qh/if-not-exists)
+                        (qh/column-definitions {:id :varchar
+                                                :header :blob
+                                                :meta :blob
+                                                :val :blob
+                                                :primary-key [:id]}))
        (qa/execute session)))
 
 (defn drop-table [session table]
@@ -123,12 +117,12 @@
 
 (comment
   (def keyspace "alia")
+  (def config {:session-keyspace keyspace})
   (let [session (qa/session {})]
     (->> (qh/create-keyspace keyspace {:with {:replication {:class "SimpleStrategy" :replication_factor 1}}})
          (qa/execute session)))
-  (qa/execute session (qdsl/drop-keyspace keyspace))
-  (def my-session (qa/session {:session-keyspace keyspace
-                               :contact-points ["127.0.0.1"]}))
+  (qa/execute (qa/session config) (qh/drop-keyspace keyspace))
+  (def my-session (qa/session {:session-keyspace keyspace}))
 
   (drop-table my-session :foo)
   (create-table my-session :foo)
@@ -137,16 +131,16 @@
   (move my-session :foo "myid" "myid3")
   (keys my-session :foo)
   (delete my-session :foo "myid3")
-  (select my-session :foo "myid2" :meta)
+  (-> (select my-session :foo "myid2" :meta) slurp)
   (row-exists? my-session :foo "myid2")
-  (close my-session)
   (->> (qh/select :foo
-                  (qh/columns :id :header :meta :value))
+                  (qh/columns :id :header :meta :val))
        ((fn [query] (qa/execute my-session query {:result-set-fn
                                                   (fn [res]
-                                                    (let [parse (fn [{:keys [id header meta value]}]
+                                                    (let [parse (fn [{:keys [id header meta val]}]
                                                                   {:id id
                                                                    :header (when bytes? (-> header .array slurp))
                                                                    :meta (when bytes? (-> meta .array slurp))
-                                                                   :value (when bytes? (-> value .array slurp))})]
-                                                      (map parse res)))})))))
+                                                                   :val (when bytes? (-> val .array slurp))})]
+                                                      (map parse res)))}))))
+  (close my-session))

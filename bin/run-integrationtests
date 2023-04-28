@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o pipefail
+
+trap teardown EXIT
+
+function setup_CASSANDRA() {
+    if [ -z ${CIRCLECI} ]; then
+        echo $(podman run --detach --publish 9042:9042 docker.io/cassandra:4.1)
+    fi
+}
+
+function teardown() {
+    if [ -z ${CIRCLECI} ]; then
+        docker rm -f ${CASSANDRA_NAME}
+    fi
+}
+
+CASSANDRA_NAME=$(setup_CASSANDRA)
+
+sleep 5
+
+TIMBRE_LEVEL=':warn' clojure -M:test
